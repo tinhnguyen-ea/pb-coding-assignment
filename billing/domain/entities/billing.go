@@ -1,0 +1,23 @@
+package entities
+
+import "time"
+
+type BillingStatus = string
+
+const (
+	BillingStatusOpen   BillingStatus = "open"
+	BillingStatusClosed BillingStatus = "closed"
+)
+
+type Billing struct {
+	ID                string        `json:"id"`
+	UserID            string        `json:"user_id"`
+	Description       string        `json:"description"`
+	Currency          string        `json:"currency"`
+	CurrencyPrecision int64         `json:"currency_precision"`
+	Status            BillingStatus `json:"status"`
+	PlannedClosedAt   *time.Time    `json:"planned_closed_at"`
+	ActualClosedAt    *time.Time    `json:"actual_closed_at"`
+	CreatedAt         time.Time     `json:"created_at"`
+	UpdatedAt         time.Time     `json:"updated_at"`
+}
