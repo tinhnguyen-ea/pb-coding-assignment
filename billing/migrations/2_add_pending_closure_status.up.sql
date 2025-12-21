@@ -1,0 +1,1 @@
+ALTER TYPE BILLING_STATUS ADD VALUE 'pending_closure';

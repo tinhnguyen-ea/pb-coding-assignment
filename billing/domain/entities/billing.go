@@ -1,12 +1,15 @@
 package entities
 
-import "time"
+import (
+	"time"
+)
 
 type BillingStatus = string
 
 const (
-	BillingStatusOpen   BillingStatus = "open"
-	BillingStatusClosed BillingStatus = "closed"
+	BillingStatusOpen           BillingStatus = "open"
+	BillingStatusPendingClosure BillingStatus = "pending_closure"
+	BillingStatusClosed         BillingStatus = "closed"
 )
 
 type Billing struct {
@@ -20,4 +23,16 @@ type Billing struct {
 	ActualClosedAt    *time.Time    `json:"actual_closed_at"`
 	CreatedAt         time.Time     `json:"created_at"`
 	UpdatedAt         time.Time     `json:"updated_at"`
+}
+
+func (b *Billing) CanAddLineItem() bool {
+	return b.Status == BillingStatusOpen
+}
+
+func (b *Billing) CanCloseBilling() bool {
+	return b.Status == BillingStatusOpen
+}
+
+func (b *Billing) CanAddItemWithAmount(amount float64) bool {
+	return b.CanAddLineItem() && hasAtMostXDecimals(amount, b.CurrencyPrecision)
 }

@@ -46,40 +46,58 @@ func (r *postgresDBRepository) GetBillingByExternalID(ctx context.Context, exter
 }
 
 func (r *postgresDBRepository) CreateBilling(ctx context.Context, userID string, externalBillingID string, description string, currency string, currencyPrecision int64, plannedClosedAt *time.Time) (string, error) {
+	fn := "infrastructure.persistence.postgresDBRepository.CreateBilling"
+	logger := rlog.With("fn", fn).With("userID", userID).With("externalBillingID", externalBillingID).With("description", description).With("currency", currency).With("currencyPrecision", currencyPrecision).With("plannedClosedAt", plannedClosedAt)
+
 	// insert billing into database
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO billings (user_id, external_billing_id, description, currency, currency_precision, status, planned_closed_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 	`, userID, externalBillingID, description, currency, currencyPrecision, entities.BillingStatusOpen, plannedClosedAt)
 	if err != nil {
+		logger.Error("failed to create billing in database", "error", err)
 		return "", entities.ErrDBService
 	}
+
+	logger.Info("billing created successfully", "billingID", externalBillingID)
 
 	// return external billing ID
 	return externalBillingID, nil
 }
 
 func (r *postgresDBRepository) AddLineItem(ctx context.Context, externalBillingID string, description string, amountMinor int64) error {
+	fn := "infrastructure.persistence.postgresDBRepository.AddLineItem"
+	logger := rlog.With("fn", fn).With("externalBillingID", externalBillingID).With("description", description).With("amountMinor", amountMinor)
+
 	// insert line item into database
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO line_items (billing_id, description, amount_minor)
 		VALUES ($1, $2, $3)
 	`, externalBillingID, description, amountMinor)
 	if err != nil {
+		logger.Error("failed to add line item to database", "error", err)
 		return entities.ErrDBService
 	}
+
+	logger.Info("line item added successfully", "billingID", externalBillingID, "description", description, "amountMinor", amountMinor)
 
 	return nil
 }
 
 func (r *postgresDBRepository) CloseBilling(ctx context.Context, externalBillingID string, actualClosedAt time.Time) error {
+	fn := "infrastructure.persistence.postgresDBRepository.CloseBilling"
+	logger := rlog.With("fn", fn).With("externalBillingID", externalBillingID).With("actualClosedAt", actualClosedAt)
+
 	// update billing in database
 	_, err := r.db.Exec(ctx, `
 		UPDATE billings SET status = $1, actual_closed_at = $2 WHERE id = $3
 	`, entities.BillingStatusClosed, actualClosedAt, externalBillingID)
 	if err != nil {
+		logger.Error("failed to close billing in database", "error", err)
 		return entities.ErrDBService
 	}
+
+	logger.Info("billing closed successfully", "billingID", externalBillingID)
 
 	return nil
 }

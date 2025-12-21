@@ -3,9 +3,7 @@ package usecases
 import (
 	"context"
 	"errors"
-	"fmt"
 	"math"
-	"strconv"
 
 	"encore.dev/rlog"
 
@@ -19,37 +17,38 @@ type addLineItemUseCase struct {
 }
 
 type AddLineItemUsecase interface {
-	AddLineItem(ctx context.Context, externalBillingID string, description string, amount float64) error
+	Execute(ctx context.Context, externalBillingID string, description string, amount float64) error
 }
 
 func NewAddLineItemUsecase(dbRepository repositories.DBRepository) AddLineItemUsecase {
 	return &addLineItemUseCase{dbRepository: dbRepository}
 }
 
-func (uc *addLineItemUseCase) AddLineItem(ctx context.Context, externalBillingID string, description string, amount float64) error {
-	logger := rlog.With("externalBillingID", externalBillingID).With("amount", amount)
+func (uc *addLineItemUseCase) Execute(ctx context.Context, externalBillingID string, description string, amount float64) error {
+	fn := "addLineItemUseCase.AddLineItem"
+	logger := rlog.With("fn", fn).With("externalBillingID", externalBillingID).With("amount", amount)
 
 	// get billing
 	billing, err := uc.dbRepository.GetBillingByExternalID(ctx, externalBillingID)
 	if err != nil {
 		if errors.Is(err, entities.ErrBillingNotFound) {
-			logger.Warn("Billing not found")
+			logger.Warn("billing not found")
 			return dto.ErrBillingNotFound
 		}
 
 		// unknown error
-		logger.Error("Failed to get billing by external ID", "error", err)
+		logger.Error("failed to get billing by external ID", "error", err)
 		return dto.ErrFailedToGetBillingByExternalID
 	}
 
 	// validate billing is open
-	if billing.Status != entities.BillingStatusOpen {
+	if !billing.CanAddLineItem() {
 		logger.Warn("billing is not open")
 		return dto.ErrBillingNotOpen
 	}
 
-	if !hasAtMostXDecimals(amount, billing.CurrencyPrecision) {
-		logger.Warn("Amount has many decimals")
+	if !billing.CanAddItemWithAmount(amount) {
+		logger.Warn("amount has many decimals")
 		return dto.ErrAmountHasManyDecimals
 	}
 
@@ -60,22 +59,11 @@ func (uc *addLineItemUseCase) AddLineItem(ctx context.Context, externalBillingID
 	// add line item
 	err = uc.dbRepository.AddLineItem(ctx, billing.ID, description, amountMinor)
 	if err != nil {
-		logger.Error("Failed to add line item to database", "error", err)
+		logger.Error("failed to add line item to database", "error", err)
 		return dto.ErrFailedToAddLineItemToDatabase
 	}
 
-	logger.Info("Line item added successfully")
+	logger.Info("line item added successfully")
 
 	return nil
-}
-
-func hasAtMostXDecimals(f float64, x int64) bool {
-	s := fmt.Sprintf(fmt.Sprintf("%%.%df", x), f)
-	converted, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return false
-	}
-
-	epsilon := 1e-9
-	return math.Abs(f-converted) < epsilon
 }
