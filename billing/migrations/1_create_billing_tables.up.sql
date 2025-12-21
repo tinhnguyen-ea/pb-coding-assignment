@@ -13,8 +13,8 @@ CREATE TABLE billings (
     status BILLING_STATUS NOT NULL DEFAULT 'open',
     planned_closed_at TIMESTAMPTZ DEFAULT NULL,
     actual_closed_at TIMESTAMPTZ DEFAULT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now()),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now())
 );
 
 CREATE INDEX billing_user_id_with_status_idx ON billings (user_id, status);
@@ -26,8 +26,8 @@ CREATE TABLE line_items (
     billing_id BIGSERIAL NOT NULL REFERENCES billings(id),
     description TEXT NOT NULL,
     amount_minor BIGINT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now()),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now())
 );
 
 /* Charges table */
@@ -36,8 +36,8 @@ CREATE TABLE charges (
     billing_id BIGSERIAL NOT NULL REFERENCES billings(id),
     amount_minor BIGINT NOT NULL,
     status CHARGE_STATUS NOT NULL DEFAULT 'pending',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now()),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now())
 );
 
 CREATE INDEX charge_billing_id_idx ON charges (billing_id);

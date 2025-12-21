@@ -14,3 +14,8 @@ type CreateBillingRequest struct {
 type CreateBillingResponse struct {
 	BillingID string `json:"billing_id"`
 }
+
+type AddLineItemRequest struct {
+	Description string  `json:"description"`
+	Amount      float64 `json:"amount"`
+}
