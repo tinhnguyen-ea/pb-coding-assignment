@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"encore.dev/rlog"
-	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 
 	"encore.app/billing/domain/repositories"
@@ -50,17 +49,18 @@ func (a *BillingActivities) StartBillingActivity(ctx context.Context, userID str
 
 // AddLineItemActivity adds a line item to a billing
 func (a *BillingActivities) AddLineItemActivity(ctx context.Context, billingID int64, description string, amount int64) error {
-	logger := activity.GetLogger(ctx)
-	logger.Info("AddLineItemActivity", "billingID", billingID, "description", description, "amount", amount)
+	fn := "billingActivities.AddLineItemActivity"
+	logger := rlog.With("fn", fn).With("billingID", billingID).With("description", description).With("amount", amount)
+	logger.Info("AddLineItemActivity starting")
 
 	// Add line item using repository
 	err := a.dbRepository.AddLineItem(ctx, billingID, description, amount)
 	if err != nil {
-		logger.Error("Failed to add line item to database", "error", err, "billingID", billingID)
+		logger.Error("Failed to add line item to database", "error", err)
 		return dto.ErrFailedToAddLineItemToDatabase
 	}
 
-	logger.Info("Line item added successfully", "billingID", billingID)
+	logger.Info("Line item added successfully")
 	return nil
 }
 
@@ -75,7 +75,7 @@ func (a *BillingActivities) CloseBillingActivity(ctx context.Context, billingID 
 	actualClosedAt := time.Now().UTC()
 	err := a.dbRepository.CloseBilling(ctx, billingID, actualClosedAt)
 	if err != nil {
-		logger.Error("Failed to close billing in database", "error", err, "billingID", billingID)
+		logger.Error("Failed to close billing in database", "error", err)
 		return err
 	}
 
