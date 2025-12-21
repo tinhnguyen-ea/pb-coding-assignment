@@ -123,3 +123,20 @@ func (r *postgresDBRepository) CreateBillingSummary(ctx context.Context, externa
 
 	return nil
 }
+
+func (r *postgresDBRepository) GetBillingSummary(ctx context.Context, externalBillingID string) (*entities.BillingSummary, error) {
+	fn := "infrastructure.persistence.postgresDBRepository.GetBillingSummary"
+	logger := rlog.With("fn", fn).With("externalBillingID", externalBillingID)
+
+	// get billing summary from database
+	var summary entities.BillingSummary
+	err := r.db.QueryRow(ctx, `
+		SELECT summary FROM billing_summaries WHERE external_billing_id = $1
+	`, externalBillingID).Scan(&summary)
+	if err != nil {
+		logger.Error("failed to get billing summary from database", "error", err)
+		return nil, entities.ErrDBService
+	}
+
+	return &summary, nil
+}

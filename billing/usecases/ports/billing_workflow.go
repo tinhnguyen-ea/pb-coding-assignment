@@ -3,6 +3,8 @@ package ports
 import (
 	"context"
 	"time"
+
+	"encore.app/billing/domain/entities"
 )
 
 type BillingWorkflow interface {
@@ -15,4 +17,7 @@ type BillingWorkflow interface {
 
 	// CloseBilling closes a billing
 	CloseBilling(ctx context.Context, externalBillingID string) error
+
+	// GetBillingSummary gets a billing summary
+	GetBillingSummary(ctx context.Context, externalBillingID string) (*entities.BillingSummary, error)
 }

@@ -8,6 +8,7 @@ import (
 	"encore.dev/rlog"
 	"go.temporal.io/sdk/client"
 
+	"encore.app/billing/domain/entities"
 	"encore.app/billing/infrastructure/temporal/workflows"
 	"encore.app/billing/usecases/dto"
 	"encore.app/billing/usecases/ports"
@@ -98,4 +99,46 @@ func (s *TemporalBillingWorkflow) CloseBilling(ctx context.Context, externalBill
 
 	logger.Info("Close-billing signal sent", "workflowID", workflowID)
 	return nil
+}
+
+// GetBillingSummary gets a billing summary
+func (s *TemporalBillingWorkflow) GetBillingSummary(ctx context.Context, externalBillingID string) (*entities.BillingSummary, error) {
+	fn := "TemporalBillingWorkflow.GetBillingSummary"
+	logger := rlog.With("fn", fn).With("externalBillingID", externalBillingID)
+
+	logger.Info("Getting billing summary")
+
+	workflowID := fmt.Sprintf("%s%s", WorkflowIDPrefix, externalBillingID)
+
+	var state workflows.BillingWorkflowState
+	resp, err := s.client.QueryWorkflow(ctx, workflowID, "", "currentState", nil)
+	if err != nil {
+		logger.Error("Failed to query billing summary", "error", err)
+		return nil, err
+	}
+
+	err = resp.Get(&state)
+	if err != nil {
+		logger.Error("Failed to get billing summary", "error", err)
+		return nil, err
+	}
+
+	lineItems := make([]entities.LineItem, len(state.LineItems))
+	for i, lineItem := range state.LineItems {
+		lineItems[i] = entities.LineItem{
+			Description: lineItem.Description,
+			AmountMinor: lineItem.AmountMinor,
+		}
+	}
+
+	summary := entities.BillingSummary{
+		ExternalBillingID: state.ExternalBillingID,
+		Description:       state.Description,
+		Currency:          state.Currency,
+		CurrencyPrecision: state.CurrencyPrecision,
+		LineItems:         lineItems,
+		TotalAmountMinor:  state.TotalAmountMinor,
+	}
+
+	return &summary, nil
 }

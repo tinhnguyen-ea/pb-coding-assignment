@@ -36,3 +36,17 @@ func (b *Billing) CanCloseBilling() bool {
 func (b *Billing) CanAddItemWithAmount(amount float64) bool {
 	return b.CanAddLineItem() && hasAtMostXDecimals(amount, b.CurrencyPrecision)
 }
+
+type LineItem struct {
+	Description string `json:"description"`
+	AmountMinor int64  `json:"amount_minor"`
+}
+
+type BillingSummary struct {
+	ExternalBillingID string     `json:"external_billing_id"`
+	Description       string     `json:"description"`
+	Currency          string     `json:"currency"`
+	CurrencyPrecision int64      `json:"currency_precision"`
+	LineItems         []LineItem `json:"line_items"`
+	TotalAmountMinor  int64      `json:"total_amount_minor"`
+}

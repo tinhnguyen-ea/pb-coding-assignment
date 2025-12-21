@@ -34,9 +34,10 @@ var (
 
 // encore:service
 type Service struct {
-	createBillingUsecase usecases.CreateBillingUsecase
-	addLineItemUsecase   usecases.AddLineItemUsecase
-	closeBillingUsecase  usecases.CloseBillingUsecase
+	createBillingUsecase     usecases.CreateBillingUsecase
+	addLineItemUsecase       usecases.AddLineItemUsecase
+	closeBillingUsecase      usecases.CloseBillingUsecase
+	getBillingSummaryUsecase usecases.GetBillingSummaryUseCase
 
 	client client.Client
 	worker worker.Worker
@@ -70,6 +71,9 @@ func initService() (*Service, error) {
 	// initialise close billing usecase
 	closeBillingUsecase := usecases.NewCloseBillingUseCase(dbRepository, billingWorkflow)
 
+	// initialise get billing summary usecase
+	getBillingSummaryUsecase := usecases.NewGetBillingSummaryUseCase(dbRepository, billingWorkflow)
+
 	// initialise temporal activities
 	billingActivities := activities.NewBillingActivities(dbRepository, temporalClient, billingWorkflowTaskQueue)
 	activities.SetActivityInstance(billingActivities)
@@ -97,9 +101,10 @@ func initService() (*Service, error) {
 	logger.Info("Temporal worker started", "taskQueue", billingWorkflowTaskQueue)
 
 	return &Service{
-		createBillingUsecase: createBillingUsecase,
-		addLineItemUsecase:   addLineItemUsecase,
-		closeBillingUsecase:  closeBillingUsecase,
+		createBillingUsecase:     createBillingUsecase,
+		addLineItemUsecase:       addLineItemUsecase,
+		closeBillingUsecase:      closeBillingUsecase,
+		getBillingSummaryUsecase: getBillingSummaryUsecase,
 
 		client: temporalClient,
 		worker: temporalWorker,
@@ -289,4 +294,57 @@ func (s *Service) CloseBilling(ctx context.Context, billingID string) error {
 	logger.Info("Billing closed successfully", "billingID", billingID)
 
 	return nil
+}
+
+// encore:api public method=GET path=/billing/:billingID/summary
+func (s *Service) GetBillingSummary(ctx context.Context, billingID string) (*GetBillingSummaryResponse, error) {
+	fn := "billing.Service.GetBillingSummary"
+	logger := rlog.With("fn", fn).With("billingID", billingID)
+
+	// validation billing ID
+	if billingID == "" {
+		logger.Warn("billing ID is invalid")
+		return nil, &errs.Error{
+			Code:    errs.InvalidArgument,
+			Message: "billing ID is required",
+		}
+	}
+
+	// get billing summary
+	summary, err := s.getBillingSummaryUsecase.Execute(ctx, billingID)
+	if err != nil {
+		if errors.Is(err, dto.ErrBillingNotFound) {
+			logger.Warn("billing not found")
+			return nil, &errs.Error{
+				Code:    errs.NotFound,
+				Message: "billing not found",
+			}
+		}
+
+		// unknown error
+		logger.Error("failed to get billing summary", "error", err)
+		return nil, &errs.Error{
+			Code:    errs.Internal,
+			Message: "failed to get billing summary",
+		}
+	}
+
+	logger.Info("Billing summary retrieved successfully", "billingID", billingID)
+
+	lineItems := make([]LineItem, len(summary.LineItems))
+	for i, lineItem := range summary.LineItems {
+		lineItems[i] = LineItem{
+			Description: lineItem.Description,
+			AmountMinor: lineItem.AmountMinor,
+		}
+	}
+
+	return &GetBillingSummaryResponse{
+		ExternalBillingID: summary.ExternalBillingID,
+		Description:       summary.Description,
+		Currency:          summary.Currency,
+		CurrencyPrecision: summary.CurrencyPrecision,
+		LineItems:         lineItems,
+		TotalAmountMinor:  summary.TotalAmountMinor,
+	}, nil
 }

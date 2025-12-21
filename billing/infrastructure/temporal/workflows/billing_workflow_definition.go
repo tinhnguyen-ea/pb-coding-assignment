@@ -17,31 +17,31 @@ const (
 )
 
 type BillingWorkflowInput struct {
-	UserID            string     `json:"userID"`
-	ExternalBillingID string     `json:"externalBillingID"`
+	UserID            string     `json:"user_id"`
+	ExternalBillingID string     `json:"billing_id"`
 	Description       string     `json:"description"`
 	Currency          string     `json:"currency"`
-	CurrencyPrecision int64      `json:"currencyPrecision"`
-	PlannedClosedAt   *time.Time `json:"plannedClosedAt"`
+	CurrencyPrecision int64      `json:"currency_precision"`
+	PlannedClosedAt   *time.Time `json:"planned_closed_at"`
 }
 
 type BillingWorkflowState struct {
-	ExternalBillingID string          `json:"externalBillingID"`
+	ExternalBillingID string          `json:"external_billing_id"`
 	BillingID         int64           `json:"-"`
 	Description       string          `json:"description"`
 	Currency          string          `json:"currency"`
-	CurrencyPrecision int64           `json:"currencyPrecision"`
+	CurrencyPrecision int64           `json:"currency_precision"`
 	Status            string          `json:"-"`
-	LineItems         []LineItemState `json:"lineItems"`
+	LineItems         []LineItemState `json:"line_items"`
 	ClosedAt          *time.Time      `json:"-"`
 	LastActivity      time.Time       `json:"-"`
-	TotalAmountMinor  int64           `json:"totalAmountMinor"`
+	TotalAmountMinor  int64           `json:"total_amount_minor"`
 }
 
 type LineItemState struct {
 	Description string    `json:"description"`
-	AmountMinor int64     `json:"amountMinor"`
-	AddedAt     time.Time `json:"addedAt"`
+	AmountMinor int64     `json:"amount_minor"`
+	AddedAt     time.Time `json:"added_at"`
 }
 
 // BillingWorkflow is the Temporal workflow for managing billing lifecycle
@@ -75,9 +75,18 @@ func BillingWorkflow(ctx workflow.Context, input BillingWorkflowInput) error {
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 
+	// set query handler for current state
+	err := workflow.SetQueryHandler(ctx, "currentState", func() (BillingWorkflowState, error) {
+		return state, nil
+	})
+	if err != nil {
+		logger.Error("Failed to set query handler", "error", err)
+		return err
+	}
+
 	// start billing activity
 	var billingID int64
-	err := workflow.ExecuteActivity(ctx, activities.StartBillingActivityFunc, input.UserID, input.ExternalBillingID, input.Description, input.Currency, input.CurrencyPrecision, input.PlannedClosedAt).Get(ctx, &billingID)
+	err = workflow.ExecuteActivity(ctx, activities.StartBillingActivityFunc, input.UserID, input.ExternalBillingID, input.Description, input.Currency, input.CurrencyPrecision, input.PlannedClosedAt).Get(ctx, &billingID)
 	if err != nil {
 		logger.Error("Failed to start billing", "error", err)
 		return err

@@ -22,4 +22,7 @@ type DBRepository interface {
 
 	// CreateBillingSummary creates a billing summary
 	CreateBillingSummary(ctx context.Context, externalBillingID string, billingSummary []byte) error
+
+	// GetBillingSummary gets a billing summary
+	GetBillingSummary(ctx context.Context, externalBillingID string) (*entities.BillingSummary, error)
 }
