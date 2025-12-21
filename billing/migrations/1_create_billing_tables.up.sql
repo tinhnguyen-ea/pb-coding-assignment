@@ -1,6 +1,5 @@
 CREATE TYPE BILLING_STATUS AS ENUM ('open', 'closed');
 CREATE TYPE CURRENCY_CODE AS ENUM ('USD', 'GEL', 'EUR', 'GBP', 'JPY', 'KRW', 'CNY', 'INR', 'BDT', 'BRL', 'CAD', 'CHF', 'CLP', 'CZK', 'DKK', 'HKD', 'HUF', 'IDR', 'ILS', 'MXN', 'MYR', 'NOK', 'NZD', 'PHP', 'PLN', 'RON', 'SEK', 'SGD', 'THB', 'TRY', 'TWD', 'ZAR');
-CREATE TYPE CHARGE_STATUS AS ENUM ('pending', 'succeeded', 'failed');
 
 /* Billings table */
 CREATE TABLE billings (
@@ -29,15 +28,3 @@ CREATE TABLE line_items (
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now()),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now())
 );
-
-/* Charges table */
-CREATE TABLE charges (
-    id BIGSERIAL PRIMARY KEY,
-    billing_id BIGSERIAL NOT NULL REFERENCES billings(id),
-    amount_minor BIGINT NOT NULL,
-    status CHARGE_STATUS NOT NULL DEFAULT 'pending',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now()),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now())
-);
-
-CREATE INDEX charge_billing_id_idx ON charges (billing_id);

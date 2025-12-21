@@ -3,57 +3,112 @@ package billing
 import (
 	"context"
 	"errors"
+	"time"
 
+	"encore.dev"
 	"encore.dev/beta/errs"
 	"encore.dev/rlog"
 	"encore.dev/storage/sqldb"
+	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/worker"
 
-	"encore.app/billing/application/dto"
-	"encore.app/billing/application/usecases"
 	"encore.app/billing/infrastructure/persistence"
 	"encore.app/billing/infrastructure/services"
+	"encore.app/billing/infrastructure/temporal"
+	"encore.app/billing/infrastructure/temporal/activities"
+	"encore.app/billing/infrastructure/temporal/workflows"
+	"encore.app/billing/usecases"
+	"encore.app/billing/usecases/dto"
 )
 
-// initialise database
-var db = sqldb.NewDatabase("billing", sqldb.DatabaseConfig{
-	Migrations: "./migrations",
-})
+var (
+	// initialise database
+	db = sqldb.NewDatabase("billing", sqldb.DatabaseConfig{
+		Migrations: "./migrations",
+	})
+
+	// initialise workflow task queue
+	envName                  = encore.Meta().Environment.Name
+	billingWorkflowTaskQueue = envName + "-billing-workflow"
+)
 
 // encore:service
 type Service struct {
 	createBillingUsecase usecases.CreateBillingUsecase
 	addLineItemUsecase   usecases.AddLineItemUsecase
-	updateBillingUsecase usecases.UpdateBillingUsecase
+	closeBillingUsecase  usecases.CloseBillingUsecase
+
+	client client.Client
+	worker worker.Worker
 }
 
 func initService() (*Service, error) {
+	logger := rlog.With("fn", "initService")
+
 	// initialise database repository
 	dbRepository := persistence.NewPostgresDBRepository(db)
 
 	// initialise FX service
 	fxService := services.NewFxService()
 
+	// initialise temporal client
+	temporalClient, err := client.Dial(client.Options{})
+	if err != nil {
+		logger.Error("failed to dial temporal client", "error", err)
+		return nil, err
+	}
+
+	// initialise billing workflow
+	billingWorkflow := temporal.NewTemporalBillingWorkflow(temporalClient, billingWorkflowTaskQueue)
+
 	// initialise create billing usecase
-	createBillingUsecase := usecases.NewCreateBillingUseCase(
-		dbRepository,
-		fxService,
-	)
+	createBillingUsecase := usecases.NewCreateBillingUseCase(fxService, billingWorkflow)
 
 	// initialise add line item usecase
-	addLineItemUsecase := usecases.NewAddLineItemUsecase(
-		dbRepository,
-	)
+	addLineItemUsecase := usecases.NewAddLineItemUsecase(dbRepository, billingWorkflow)
 
-	// initialise update billing usecase
-	updateBillingUsecase := usecases.NewUpdateBillingUseCase(
-		dbRepository,
-	)
+	// initialise close billing usecase
+	closeBillingUsecase := usecases.NewCloseBillingUseCase(dbRepository, billingWorkflow)
+
+	// initialise temporal activities
+	billingActivities := activities.NewBillingActivities(dbRepository, temporalClient, billingWorkflowTaskQueue)
+	activities.SetActivityInstance(billingActivities)
+
+	// initialise temporal worker
+	temporalWorker := worker.New(temporalClient, billingWorkflowTaskQueue, worker.Options{})
+
+	// register workflows
+	temporalWorker.RegisterWorkflow(workflows.BillingWorkflow)
+
+	// register activities
+	temporalWorker.RegisterActivity(activities.StartBillingActivityFunc)
+	temporalWorker.RegisterActivity(activities.AddLineItemActivityFunc)
+	temporalWorker.RegisterActivity(activities.CloseBillingActivityFunc)
+	temporalWorker.RegisterActivity(activities.CreateBillingSummaryActivityFunc)
+
+	// start worker in background
+	go func() {
+		err := temporalWorker.Run(worker.InterruptCh())
+		if err != nil {
+			logger.Error("temporal worker stopped with error", "error", err)
+		}
+	}()
+
+	logger.Info("Temporal worker started", "taskQueue", billingWorkflowTaskQueue)
 
 	return &Service{
 		createBillingUsecase: createBillingUsecase,
 		addLineItemUsecase:   addLineItemUsecase,
-		updateBillingUsecase: updateBillingUsecase,
+		closeBillingUsecase:  closeBillingUsecase,
+
+		client: temporalClient,
+		worker: temporalWorker,
 	}, nil
+}
+
+func (s *Service) Shutdown(ctx context.Context) {
+	s.client.Close()
+	s.worker.Stop()
 }
 
 // encore:api public method=POST path=/billing
@@ -80,8 +135,17 @@ func (s *Service) CreateBilling(ctx context.Context, req *CreateBillingRequest) 
 		}
 	}
 
+	// validate planned closed at
+	if req.PlannedClosedAt != nil && req.PlannedClosedAt.Before(time.Now().UTC()) {
+		logger.Warn("planned closed at is in the past")
+		return nil, &errs.Error{
+			Code:    errs.InvalidArgument,
+			Message: "planned closed at is in the past",
+		}
+	}
+
 	logger.Info("Creating billing", "description", req.Description, "currency", req.Currency, "plannedClosedAt", req.PlannedClosedAt)
-	billingID, err := s.createBillingUsecase.CreateBilling(ctx, req.UserID, req.Description, req.Currency, req.PlannedClosedAt)
+	billingID, err := s.createBillingUsecase.Execute(ctx, req.UserID, req.Description, req.Currency, req.PlannedClosedAt)
 	if err != nil {
 		if errors.Is(err, dto.ErrCurrencyNotSupported) {
 			logger.Warn("currency not supported")
@@ -143,7 +207,7 @@ func (s *Service) AddLineItem(ctx context.Context, billingID string, req *AddLin
 
 	logger.Info("Adding line item to billing", "description", req.Description, "amount", req.Amount)
 
-	err := s.addLineItemUsecase.AddLineItem(ctx, billingID, req.Description, req.Amount)
+	err := s.addLineItemUsecase.Execute(ctx, billingID, req.Description, req.Amount)
 	if err != nil {
 		if errors.Is(err, dto.ErrBillingNotFound) {
 			logger.Warn("billing not found")
@@ -152,8 +216,8 @@ func (s *Service) AddLineItem(ctx context.Context, billingID string, req *AddLin
 				Message: "billing not found",
 			}
 		}
-		if errors.Is(err, dto.ErrAmountHasManyDecimals) {
-			logger.Warn("amount has many decimals")
+		if errors.Is(err, dto.ErrAmountHasTooManyDecimals) {
+			logger.Warn("amount has too many decimals")
 			return &errs.Error{
 				Code:    errs.InvalidArgument,
 				Message: "amount has many decimals",
@@ -180,7 +244,7 @@ func (s *Service) AddLineItem(ctx context.Context, billingID string, req *AddLin
 	return nil
 }
 
-// encore:api public method=PATCH path=/billing/:billingID
+// encore:api public method=POST path=/billing/:billingID/close
 func (s *Service) CloseBilling(ctx context.Context, billingID string) error {
 	fn := "billing.Service.CloseBilling"
 	logger := rlog.With("fn", fn).With("billingID", billingID)
@@ -195,7 +259,7 @@ func (s *Service) CloseBilling(ctx context.Context, billingID string) error {
 		}
 	}
 
-	err := s.updateBillingUsecase.CloseBilling(ctx, billingID)
+	err := s.closeBillingUsecase.Execute(ctx, billingID)
 	if err != nil {
 		if errors.Is(err, dto.ErrBillingNotFound) {
 			logger.Warn("billing not found")

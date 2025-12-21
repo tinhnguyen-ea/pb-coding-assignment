@@ -3,28 +3,29 @@ package usecases
 import (
 	"context"
 	"errors"
-	"time"
 
-	"encore.app/billing/application/dto"
 	"encore.app/billing/domain/entities"
 	"encore.app/billing/domain/repositories"
+	"encore.app/billing/usecases/dto"
+	"encore.app/billing/usecases/ports"
 	"encore.dev/rlog"
 )
 
-type updateBillingUseCase struct {
-	dbRepository repositories.DBRepository
+type closeBillingUseCase struct {
+	dbRepository    repositories.DBRepository
+	billingWorkflow ports.BillingWorkflow
 }
 
-type UpdateBillingUsecase interface {
+type CloseBillingUsecase interface {
 	Execute(ctx context.Context, externalBillingID string) error
 }
 
-func NewUpdateBillingUseCase(dbRepository repositories.DBRepository) UpdateBillingUsecase {
-	return &updateBillingUseCase{dbRepository: dbRepository}
+func NewCloseBillingUseCase(dbRepository repositories.DBRepository, billingWorkflow ports.BillingWorkflow) CloseBillingUsecase {
+	return &closeBillingUseCase{dbRepository: dbRepository, billingWorkflow: billingWorkflow}
 }
 
-func (uc *updateBillingUseCase) Execute(ctx context.Context, externalBillingID string) error {
-	fn := "updateBillingUseCase.CloseBilling"
+func (uc *closeBillingUseCase) Execute(ctx context.Context, externalBillingID string) error {
+	fn := "closeBillingUseCase.CloseBilling"
 	logger := rlog.With("fn", fn).With("externalBillingID", externalBillingID)
 
 	// get billing
@@ -45,10 +46,10 @@ func (uc *updateBillingUseCase) Execute(ctx context.Context, externalBillingID s
 	}
 
 	// close billing
-	err = uc.dbRepository.CloseBilling(ctx, billing.ID, time.Now().UTC())
+	err = uc.billingWorkflow.CloseBilling(ctx, externalBillingID)
 	if err != nil {
-		logger.Error("failed to close billing in database", "error", err)
-		return dto.ErrFailedToCloseBillingInDatabase
+		logger.Error("failed to close billing", "error", err)
+		return dto.ErrFailedToCloseBillingInWorkflow
 	}
 
 	logger.Info("billing closed successfully", "billingID", billing.ID)

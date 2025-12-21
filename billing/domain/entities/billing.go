@@ -13,7 +13,7 @@ const (
 )
 
 type Billing struct {
-	ID                string        `json:"id"`
+	ID                int64         `json:"id"`
 	UserID            string        `json:"user_id"`
 	Description       string        `json:"description"`
 	Currency          string        `json:"currency"`

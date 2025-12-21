@@ -8,24 +8,25 @@ import (
 	"encore.dev/rlog"
 	"github.com/google/uuid"
 
-	"encore.app/billing/application/dto"
-	"encore.app/billing/domain/repositories"
 	"encore.app/billing/domain/services"
+	"encore.app/billing/usecases/dto"
+	"encore.app/billing/usecases/ports"
 )
 
 type createBillingUseCase struct {
-	dbRepository repositories.DBRepository
-	fxService    services.FxService
+	fxService services.FxService
+
+	billingWorkflow ports.BillingWorkflow
 }
 
 type CreateBillingUsecase interface {
 	Execute(ctx context.Context, userID string, description string, currency string, plannedClosedAt *time.Time) (string, error)
 }
 
-func NewCreateBillingUseCase(dbRepository repositories.DBRepository, fxService services.FxService) CreateBillingUsecase {
+func NewCreateBillingUseCase(fxService services.FxService, billingWorkflow ports.BillingWorkflow) CreateBillingUsecase {
 	return &createBillingUseCase{
-		dbRepository: dbRepository,
-		fxService:    fxService,
+		fxService:       fxService,
+		billingWorkflow: billingWorkflow,
 	}
 }
 
@@ -59,15 +60,14 @@ func (uc *createBillingUseCase) Execute(ctx context.Context, userID string, desc
 		return "", dto.ErrCurrencyMetadataNotFound
 	}
 
-	// create billing
-	currencyPrecision := currencyMetadata.Precision
-	externalBillingID, err = uc.dbRepository.CreateBilling(ctx, userID, externalBillingID, description, currency, currencyPrecision, plannedClosedAt)
+	// start billing workflow
+	err = uc.billingWorkflow.StartBilling(ctx, userID, externalBillingID, description, currency, currencyMetadata.Precision, plannedClosedAt)
 	if err != nil {
-		logger.Error("failed to create billing in database")
-		return "", dto.ErrFailedToCreateBillingInDatabase
+		logger.Error("failed to start billing workflow")
+		return "", dto.ErrFailedToStartBillingWorkflow
 	}
 
-	logger.Info("billing created successfully", "billingID", externalBillingID)
+	logger.Info("billing created successfully")
 
 	// return external billing ID
 	return externalBillingID, nil

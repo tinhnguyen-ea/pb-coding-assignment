@@ -9,7 +9,7 @@ var (
 	ErrFailedToGenerateBillingID       = errors.New("failed to generate billing ID")
 
 	ErrBillingNotFound                = errors.New("billing not found")
-	ErrAmountHasManyDecimals          = errors.New("amount has many decimals")
+	ErrAmountHasTooManyDecimals       = errors.New("amount has too many decimals")
 	ErrBillingNotOpen                 = errors.New("billing is not open")
 	ErrFailedToGetBillingByExternalID = errors.New("failed to get billing by external ID")
 	ErrFailedToAddLineItemToDatabase  = errors.New("failed to add line item to database")

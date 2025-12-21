@@ -7,21 +7,23 @@ import (
 
 	"encore.dev/rlog"
 
-	"encore.app/billing/application/dto"
 	"encore.app/billing/domain/entities"
 	"encore.app/billing/domain/repositories"
+	"encore.app/billing/usecases/dto"
+	"encore.app/billing/usecases/ports"
 )
 
 type addLineItemUseCase struct {
-	dbRepository repositories.DBRepository
+	dbRepository    repositories.DBRepository
+	billingWorkflow ports.BillingWorkflow
 }
 
 type AddLineItemUsecase interface {
 	Execute(ctx context.Context, externalBillingID string, description string, amount float64) error
 }
 
-func NewAddLineItemUsecase(dbRepository repositories.DBRepository) AddLineItemUsecase {
-	return &addLineItemUseCase{dbRepository: dbRepository}
+func NewAddLineItemUsecase(dbRepository repositories.DBRepository, billingWorkflow ports.BillingWorkflow) AddLineItemUsecase {
+	return &addLineItemUseCase{dbRepository: dbRepository, billingWorkflow: billingWorkflow}
 }
 
 func (uc *addLineItemUseCase) Execute(ctx context.Context, externalBillingID string, description string, amount float64) error {
@@ -48,19 +50,19 @@ func (uc *addLineItemUseCase) Execute(ctx context.Context, externalBillingID str
 	}
 
 	if !billing.CanAddItemWithAmount(amount) {
-		logger.Warn("amount has many decimals")
-		return dto.ErrAmountHasManyDecimals
+		logger.Warn("amount has too many decimals")
+		return dto.ErrAmountHasTooManyDecimals
 	}
 
 	// convert amount to minor units
 	currencyPrecision := billing.CurrencyPrecision
 	amountMinor := int64(amount * math.Pow10(int(currencyPrecision)))
 
-	// add line item
-	err = uc.dbRepository.AddLineItem(ctx, billing.ID, description, amountMinor)
+	// add line item to billing workflow
+	err = uc.billingWorkflow.AddLineItem(ctx, externalBillingID, description, amountMinor)
 	if err != nil {
-		logger.Error("failed to add line item to database", "error", err)
-		return dto.ErrFailedToAddLineItemToDatabase
+		logger.Error("failed to add line item to billing workflow", "error", err)
+		return dto.ErrFailedToAddLineItemToBillingWorkflow
 	}
 
 	logger.Info("line item added successfully")
