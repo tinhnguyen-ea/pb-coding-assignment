@@ -116,7 +116,7 @@ func (s *Service) Shutdown(ctx context.Context) {
 	s.worker.Stop()
 }
 
-// encore:api public method=POST path=/billing
+// encore:api private method=POST path=/billing
 func (s *Service) CreateBilling(ctx context.Context, req *CreateBillingRequest) (*CreateBillingResponse, error) {
 	fn := "billing.Service.CreateBilling"
 	logger := rlog.With("fn", fn).With("UserID", req.UserID)
@@ -196,7 +196,7 @@ func (s *Service) CreateBilling(ctx context.Context, req *CreateBillingRequest) 
 	}, nil
 }
 
-// encore:api public method=POST path=/billing/:billingID/line-item
+// encore:api private method=POST path=/billing/:billingID/line-item
 func (s *Service) AddLineItem(ctx context.Context, billingID string, req *AddLineItemRequest) error {
 	fn := "billing.Service.AddLineItem"
 	logger := rlog.With("fn", fn).With("billingID", billingID).With("Amount", req.Amount)
@@ -249,7 +249,7 @@ func (s *Service) AddLineItem(ctx context.Context, billingID string, req *AddLin
 	return nil
 }
 
-// encore:api public method=POST path=/billing/:billingID/close
+// encore:api private method=POST path=/billing/:billingID/close
 func (s *Service) CloseBilling(ctx context.Context, billingID string) error {
 	fn := "billing.Service.CloseBilling"
 	logger := rlog.With("fn", fn).With("billingID", billingID)
@@ -296,7 +296,7 @@ func (s *Service) CloseBilling(ctx context.Context, billingID string) error {
 	return nil
 }
 
-// encore:api public method=GET path=/billing/:billingID/summary
+// encore:api private method=GET path=/billing/:billingID/summary
 func (s *Service) GetBillingSummary(ctx context.Context, billingID string) (*GetBillingSummaryResponse, error) {
 	fn := "billing.Service.GetBillingSummary"
 	logger := rlog.With("fn", fn).With("billingID", billingID)
