@@ -1,6 +1,6 @@
 # Billing Service
 
-A production-ready billing service built with Encore.go, implementing Clean Architecture principles and using Temporal for workflow orchestration.
+A billing service built with Encore.go, implementing Clean Architecture principles and using Temporal for workflow orchestration.
 
 ## Table of Contents
 
